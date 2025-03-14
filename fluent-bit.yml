@@ -1,0 +1,30 @@
+service:
+  flush: 1
+  log_level: trace
+
+parsers:
+  # https://github.com/fluent/fluent-bit/blob/master/conf/parsers.conf#L20-L25
+- name: nginx
+  format: regex
+  regex: '^(?<remote>[^ ]*) (?<host>[^ ]*) (?<user>[^ ]*) \[(?<time>[^\]]*)\] "(?<method>\S+)(?: +(?<path>[^\"]*?)(?: +\S*)?)?" (?<code>[^ ]*) (?<size>[^ ]*)(?: "(?<referer>[^\"]*)" "(?<agent>[^\"]*)")'
+  time_key: time
+  time_format: '%d/%b/%Y:%H:%M:%S %z'
+
+pipeline:
+  inputs:
+  # See https://docs.fluentbit.io/manual/administration/performance
+  - name: tail
+    path: /var/log/nginx/access.log
+    db: /var/log/nginx/access_log.db
+    tag: nginx.access
+    parser: nginx
+
+  outputs:
+  - name: kafka
+    match: '*'
+    # format: raw
+    brokers: redpanda-0:9092,redpanda-1:9092,redpanda-2:9092
+    topics: nginx.access
+    # raw_log_key: key_0
+    rdkafka.log.connection.close: false
+    rdkafka.request.required.acks: 1

@@ -1,0 +1,7 @@
+src/wproc
+connect.yml
+docker-compose.yml
+fluent-bit.yml
+readme.md
+.gitignore
+nginx-logs

@@ -24,8 +24,6 @@ services:
     depends_on:
     - nginx
     - redpanda-0
-    # links:
-    # - redpanda-0
     image: fluent/fluent-bit:latest
     networks:
       - redpanda_network
@@ -36,7 +34,20 @@ services:
         source: ./nginx-logs
         target: /var/log/nginx
     entrypoint: ["/fluent-bit/bin/fluent-bit", "-c", "/etc/fluent-bit.yml"]
-  
+
+  wproc:
+    depends_on:
+      - redpanda-0
+    image: wrpoc
+    networks:
+      - redpanda_network
+    build:
+      dockerfile: Dockerfile
+    container_name: wproc
+    environment:
+      BROKERS: redpanda-0:9092,redpanda-1:9092,redpanda-2:9092
+      TOPIC: nginx.access
+
   # https://docs.redpanda.com/redpanda-labs/docker-compose/three-brokers/
   redpanda-0:
     command:

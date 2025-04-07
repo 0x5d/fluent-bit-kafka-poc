@@ -71,9 +71,6 @@ func consume(ctx context.Context, cl *kgo.Client) {
 				iter.Next()
 				seen++
 			}
-			// for r := iter.Next(); r != nil; r = iter.Next() {
-			// 	seen++
-			// }
 			err := cl.CommitUncommittedOffsets(ctx)
 			if err != nil {
 				fmt.Printf("commit records failed: %v", err)

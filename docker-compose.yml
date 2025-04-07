@@ -1,3 +1,22 @@
+x-common-env: &cenv
+  common: &common
+    networks:
+      - redpanda_network
+  minio: &minio
+    <<: *common
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+  redpanda: &redpanda
+    <<: *common
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
+    healthcheck:
+      test: curl -f localhost:9644/v1/status/ready
+      interval: 1s
+      retries: 5
+      start_period: 5s
+
 networks:
   redpanda_network:
     driver: bridge
@@ -6,6 +25,8 @@ volumes:
   redpanda-0: null
   redpanda-1: null
   redpanda-2: null
+  minio:
+    driver: local
 
 services:
   nginx:
@@ -47,6 +68,32 @@ services:
     environment:
       BROKERS: redpanda-0:9092,redpanda-1:9092,redpanda-2:9092
       TOPIC: nginx.access
+
+  minio:
+    <<: *minio
+    container_name: minio
+    ports:
+      - "9000:9000"  # API port
+      - "9001:9001"  # Console port
+    volumes:
+      - minio:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+  minio-init:
+    <<: *minio
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./scripts/minio-init.sh:/init.sh
+    entrypoint: /init.sh
 
   # https://docs.redpanda.com/redpanda-labs/docker-compose/three-brokers/
   redpanda-0:

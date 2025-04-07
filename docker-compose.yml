@@ -69,6 +69,24 @@ services:
       BROKERS: redpanda-0:9092,redpanda-1:9092,redpanda-2:9092
       TOPIC: nginx.access
 
+  connect:
+    depends_on:
+      redpanda-0:
+        condition: service_healthy
+      redpanda-1:
+        condition: service_healthy
+      redpanda-2:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    image: docker.redpanda.com/redpandadata/connect
+    networks:
+      - redpanda_network
+    container_name: connect
+    volumes:
+      - ./connect.yml:/connect.yaml
+      - ./config/connect-aws-credentials.toml:/home/connect/.aws/credentials
+
   minio:
     <<: *minio
     container_name: minio

@@ -1,0 +1,36 @@
+logger:
+  level: DEBUG
+
+input:
+  redpanda:
+    seed_brokers: ["redpanda-0:9092", "redpanda-1:9092", "redpanda-2:9092"]
+    topics: ["nginx.access"]
+    regexp_topics: false
+    consumer_group: "connect"
+    start_from_oldest: false
+    auto_replay_nacks: true
+
+output:
+  aws_s3:
+    max_in_flight: 1
+    endpoint: http://minio:9000
+    bucket: access-logs
+    force_path_style_urls: true
+    region: sa-east-1
+    path: '${! timestamp_unix().ts_format(format: "2006-01-02", tz: "UTC") }/${! timestamp_unix().ts_format(format: "2006-01-02_15_04", tz: "UTC") }-${! uuid_v4() }.parquet'
+    batching:
+      period: 60s
+      processors:
+        - parquet_encode:
+            default_compression: zstd
+            schema:
+              - { name: '@timestamp', type: DOUBLE }
+              - { name: remote,       type: UTF8 }
+              - { name: host,         type: UTF8 }
+              - { name: user,         type: UTF8 }
+              - { name: method,       type: UTF8 }
+              - { name: path,         type: UTF8 }
+              - { name: code,         type: UTF8 }
+              - { name: size,         type: UTF8 }
+              - { name: referer,      type: UTF8 }
+              - { name: agent,        type: UTF8 }

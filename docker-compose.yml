@@ -42,34 +42,36 @@ services:
           create_host_path: true
 
   fbit:
-    depends_on:
-    - nginx
-    - redpanda-0
-    image: fluent/fluent-bit:latest
-    networks:
-      - redpanda_network
+    <<: *common
     container_name: fbit
+    depends_on:
+      nginx:
+        condition: service_started
+      redpanda-0:
+        condition: service_healthy
+    image: fluent/fluent-bit:latest
     volumes:
-      - ./fluent-bit.yml:/etc/fluent-bit.yml
+      - ./config/fluent-bit.yml:/etc/fluent-bit.yml
       - type: bind
         source: ./nginx-logs
         target: /var/log/nginx
-    entrypoint: ["/fluent-bit/bin/fluent-bit", "-c", "/etc/fluent-bit.yml"]
+    entrypoint: [ "/fluent-bit/bin/fluent-bit", "-c", "/etc/fluent-bit.yml" ]
 
   wproc:
-    depends_on:
-      - redpanda-0
-    image: wrpoc
-    networks:
-      - redpanda_network
+    <<: *common
+    image: wproc
     build:
       dockerfile: Dockerfile
     container_name: wproc
+    depends_on:
+      redpanda-0:
+        condition: service_healthy
     environment:
       BROKERS: redpanda-0:9092,redpanda-1:9092,redpanda-2:9092
       TOPIC: nginx.access
 
   connect:
+    <<: *common
     depends_on:
       redpanda-0:
         condition: service_healthy
@@ -80,24 +82,22 @@ services:
       minio:
         condition: service_healthy
     image: docker.redpanda.com/redpandadata/connect
-    networks:
-      - redpanda_network
     container_name: connect
     volumes:
-      - ./connect.yml:/connect.yaml
+      - ./config/connect.yml:/connect.yaml
       - ./config/connect-aws-credentials.toml:/home/connect/.aws/credentials
 
   minio:
     <<: *minio
     container_name: minio
     ports:
-      - "9000:9000"  # API port
-      - "9001:9001"  # Console port
+      - "9000:9000" # API port
+      - "9001:9001" # Console port
     volumes:
       - minio:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -115,6 +115,8 @@ services:
 
   # https://docs.redpanda.com/redpanda-labs/docker-compose/three-brokers/
   redpanda-0:
+    <<: *redpanda
+    container_name: redpanda-0
     command:
       - redpanda
       - start
@@ -137,12 +139,8 @@ services:
       # Tells Seastar (the framework Redpanda uses under the hood) to use 1 core on the system.
       - --smp 1
       - --default-log-level=info
-    image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
-    container_name: redpanda-0
     volumes:
       - redpanda-0:/var/lib/redpanda/data
-    networks:
-      - redpanda_network
     ports:
       - 18081:18081
       - 18082:18082
@@ -150,6 +148,10 @@ services:
       - 19644:9644
 
   redpanda-1:
+    <<: *redpanda
+    container_name: redpanda-1
+    depends_on:
+      - redpanda-0
     command:
       - redpanda
       - start
@@ -164,21 +166,19 @@ services:
       - --smp 1
       - --default-log-level=info
       - --seeds redpanda-0:33145
-    image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
-    container_name: redpanda-1
     volumes:
       - redpanda-1:/var/lib/redpanda/data
-    networks:
-      - redpanda_network
     ports:
       - 28081:28081
       - 28082:28082
       - 29092:29092
       - 29644:9644
-    depends_on:
-      - redpanda-0
 
   redpanda-2:
+    <<: *redpanda
+    container_name: redpanda-2
+    depends_on:
+      - redpanda-0
     command:
       - redpanda
       - start
@@ -193,40 +193,24 @@ services:
       - --smp 1
       - --default-log-level=info
       - --seeds redpanda-0:33145
-    image: docker.redpanda.com/redpandadata/redpanda:v24.3.6
-    container_name: redpanda-2
     volumes:
       - redpanda-2:/var/lib/redpanda/data
-    networks:
-      - redpanda_network
     ports:
       - 38081:38081
       - 38082:38082
       - 39092:39092
       - 39644:9644
-    depends_on:
-      - redpanda-0
 
   console:
-    container_name: redpanda-console
+    <<: *common
+    depends_on:
+      redpanda-0:
+        condition: service_healthy
     image: docker.redpanda.com/redpandadata/console:v2.8.4
-    networks:
-      - redpanda_network
-    entrypoint: /bin/sh
-    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    container_name: redpanda-console
+    volumes:
+      - ./config/console-config.yml:/tmp/config.yml
     environment:
       CONFIG_FILEPATH: /tmp/config.yml
-      CONSOLE_CONFIG_FILE: |
-        kafka:
-          brokers: ["redpanda-0:9092"]
-          schemaRegistry:
-            enabled: true
-            urls: ["http://redpanda-0:8081"]
-        redpanda:
-          adminApi:
-            enabled: true
-            urls: ["http://redpanda-0:9644"]
     ports:
       - 8000:8080
-    depends_on:
-      - redpanda-0
